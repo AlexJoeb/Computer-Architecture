@@ -17,27 +17,34 @@ class CPU:
     def ram_write(self, MAR, MDR): # Memory Address Register (MAR) / Memory Data Register (MDR)
         self.ram[MAR] = MDR
 
-    def load(self):
+    def ram_clear(self): self.ram = [0] * 256
+
+    def load(self, args=sys.argv[1:]):
         """Load a program into memory."""
 
         address = 0
+        
+        if len(args) < 1:
+            print("Error: No file name provided.")
+            return
+        
+        if not args[0] or args[0].split('.')[1] != 'ls8':
+            print("Error: File not found. Only 'ls8' files accepted.")
+            return
 
-        # For now, we've just hardcoded a program:
-
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
-
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
-
+        try:
+            with open(args[0]) as file:
+                for line in file:
+                    try:
+                        line = int(line.split('#')[0].strip(), 2)
+                        self.ram_write(address, line)
+                        address += 1
+                    except ValueError:
+                        print("Error: Unknown value fed into RAM.")
+                        return
+        except ValueError:
+            print("Error: Could not find and/or traverse file provided.")
+            return
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -68,42 +75,39 @@ class CPU:
 
         print()
 
-    def run(self, args=None):
+    def run(self):
         """Run the CPU."""
-        
-        if not args or args[0] == '' or not args[0]: print("Error: Could not find file to run.")
-        
-        with open(args[0]) as file:
-            lines = file.readlines()
-            print(lines)
-            for line in lines:
-                line = line.split(' # ')[0].strip()
-                print(f'> {line}')
 
         running = True
 
         ir = {
-             0b10000010: 'LDI',
-             0b01000111: 'PRN',
-             0b00000001: 'HLT'
+            0b10000010: 'LDI',
+            0b01000111: 'PRN',
+            0b00000001: 'HLT',
+            0b10100010: 'MUL'
         }
 
         while running:
             i = self.ram[self.pc]
             ins = ir[i]
-
             if ins == 'LDI':
                 # Preform LDI Action.
                 reg_num = self.ram_read(self.pc + 1)
                 value = self.ram_read(self.pc + 2)
-                self.reg[reg_num] = [value]
+                self.reg[reg_num] = value
                 self.pc += 3
             elif ins == 'PRN':
                 # Preform PRN Action.
                 reg_num = self.ram_read(self.pc + 1)
-                print(self.reg[reg_num])
+                print(f'PRN > {self.reg[reg_num]}')
                 self.pc += 2
             elif ins == 'HLT':
                 # Preform HLT.
                 running = False
+            elif ins == 'MUL':
+                # Preform MUL Action.
+                reg_num_a = self.ram_read(self.pc + 1)
+                reg_num_b = self.ram_read(self.pc + 2)
+                self.reg[reg_num_a] *= self.reg[reg_num_b]
+                self.pc += 3
             else: print(f'Unknown Instruction Code: {i}')
