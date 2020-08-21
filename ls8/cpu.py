@@ -3,6 +3,7 @@
 import sys
 
 SP = 7
+HLT = 0b1
 
 class CPU:
     """Main CPU class."""
@@ -12,7 +13,8 @@ class CPU:
         self.reg = [0] * 8
         self.reg[SP] = 0xF4 # Set the stack pointer (SP) to 244 -
         self.pc = 0 # Program Counter (PC), the index into memory of the currently-executing instruction
-        
+        self.flags = 0b0
+        self.hlt: HLT # Hault
 
     def ram_read(self, MAR):
         return self.ram[MAR]
@@ -56,7 +58,36 @@ class CPU:
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
-        #elif op == "SUB": etc
+        elif op == 'MUL':
+            self.reg[reg_a] *= self.reg[reg_b]
+        elif op == "CMP":
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.flags = 0b1
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.flags = 0b10
+            elif self.reg[reg_a] < self.reg[reg_b]:
+                self.flags = 0b100
+        elif op == 'AND':
+            self.reg[reg_a] = self.reg[reg_a] & self.reg[reg_b]
+        elif op == 'OR':
+            self.reg[reg_a] = self.reg[reg_a] | self.reg[reg_b]
+        elif op == 'XOR':
+            self.reg[reg_a] = self.reg[reg_a] ^ self.reg[reg_b]
+        elif op == 'NOT':
+            reg = self.reg[reg_a]
+            value = self.reg[reg]
+            self.reg[reg] = ~value
+        elif op == 'SHL':
+            # SHL - SHift Left
+            self.reg[reg_a] << self.reg[reg_b]
+        elif op == 'SHR':
+            # SHR - SHift Right
+            self.reg[reg_a] >> self.reg[reg_b]
+        elif op == 'MOD':
+            if self.reg[reg_b] == 0:
+                print('Can not perform MOD on 0 value.')
+                self.hlt(reg_a, reg_b)
+            else: self.reg[reg_a] %= self.reg[reg_b]
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -94,7 +125,18 @@ class CPU:
             0b01000101: 'PUSH',
             0b01000110: 'POP',
             0b01010000: 'CALL',
-            0b00010001: 'RET'
+            0b00010001: 'RET',
+            0b10100111: 'CMP',
+            0b01010100: 'JMP',
+            0b01010101: 'JEQ',
+            0b01010110: 'JNE',
+            0b10101000: 'AND',
+            0b10101010: 'OR',
+            0b10101011: 'XOR',
+            0b01101001: 'NOT',
+            0b10101100: 'SHL',
+            0b10101101: 'SHR',
+            0b10100100: 'MOD'
         }
 
         while running:
@@ -172,5 +214,43 @@ class CPU:
                 return_addr = self.ram[from_addr]
                 self.reg[SP] += 1
                 self.pc = return_addr
+            elif ins == 'CMP':
+                # Compare the values in two registers. | ### CMP Line 224 in Spec
+                reg_a = self.ram[self.pc + 1]
+                reg_b = self.ram[self.pc + 2]
                 
+                self.alu('CMP', reg_a, reg_b)
+                self.pc += 3
+            elif ins == 'JMP':
+                # Jump to the address stored in the given register. | ### JMP Line 407 in Spec
+                reg_a = self.ram[self.pc + 1] # STore location to jump to.
+                self.pc = self.reg[reg_a] # Set the pointer to the jump location.
+                return True
+            elif ins == 'JEQ':
+                # If `equal` flag is set (true), jump to the address stored in the given register. | ### JEQ Line 345 in Spec
+                reg_a = self.ram[self.pc + 1] # Pointer to jump to if flag is True
+                if (self.flags & 0b1) == 1:
+                    self.pc = self.reg[reg_a]
+                else:
+                    # Skip over because flag is not True
+                    self.pc += 2
+            elif ins == 'JNE':
+                # If `E` flag is clear (false, 0), jump to the address stored in the given register. | ### JNE Line 422 in Spec
+                reg_a = self.ram[self.pc + 1] # Address to jump to.
+                if (self.flags & 0b1) == 0:
+                    self.pc = self.reg[reg_a]
+                else:
+                    # Skip over because flag is not False
+                    self.pc += 2
+
+            # -----------------------------
+            # ---------- Stretch ----------
+            # -----------------------------
+            elif ins == 'AND' or ins == 'OR' or ins == 'XOR' or ins == 'NOT'
+                    or ins == 'SHL' or ins == 'SHR' or ins == 'MOD':
+                reg_a = self.ram[self.pc + 1]
+                reg_b = self.ram[self.pc + 2]
+
+                self.alu(ins, reg_a, reg_b)
+                self.pc += 3
             else: print(f'Unknown Instruction Code: {i}')
